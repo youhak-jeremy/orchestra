@@ -426,7 +426,7 @@ def get_cluster_accuracy(net, test_data_loader, device="cpu", verbose=True):
     cluster_ids_x = clustering.labels_
 
     # Test        
-    confusion_mat = torch.zeros((num_cluster,10))
+    confusion_mat = torch.zeros((num_cluster,classes))
     # pred_clusters = cluster_ids_x.numpy()
     pred_clusters = cluster_ids_x 
     correct = 0
