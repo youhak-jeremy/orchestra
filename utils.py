@@ -13,6 +13,7 @@ import torchvision.transforms as T
 import torchvision.transforms.functional as TF
 from torch.utils.data import DataLoader, Dataset
 from torchvision.datasets import CIFAR10, CIFAR100
+from sklearn.cluster import KMeans
 import pickle as pkl
 import numpy as np
 import sys
@@ -399,6 +400,46 @@ def test(net, testloader, device="cpu", verbose=True):
                     % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
     return test_loss/(batch_idx+1), 100. * (correct / total)
 
+### get_cluster_accuracy
+def get_cluster_accuracy(net, test_data_loader, device="cpu", verbose=True):
+    net.eval()
+    classes = len(test_data_loader.dataset.classes)
+    num_cluster = 64 if classes < 64 else 128
+    
+    # Accumulate embeddings
+    accumulated_embeddings = []
+    raw_test_y = []
+    with torch.no_grad():
+        for batch_idx, (inputs, targets) in enumerate(test_data_loader):
+            inputs = inputs.to(device)
+            outputs = net(inputs.to(device))
+            accumulated_embeddings.extend([x for x in outputs])
+            raw_test_y.extend([x for x in targets])
+    tmp = torch.stack(accumulated_embeddings, 0)
+    if device != 'cpu':
+        tmp = tmp.cpu()
+    # cluster_ids_x, cluster_centers = kmeans(
+    #             X=tmp, num_clusters=num_cluster, distance='euclidean', device=device
+    #         )
+    clustering = KMeans(n_clusters=num_cluster, random_state=0).fit(tmp)
+    cluster_centers = torch.from_numpy(clustering.cluster_centers_)
+    cluster_ids_x = clustering.labels_
+
+    # Test        
+    confusion_mat = torch.zeros((num_cluster,10))
+    # pred_clusters = cluster_ids_x.numpy()
+    pred_clusters = cluster_ids_x 
+    correct = 0
+    total = len(accumulated_embeddings)
+    for i, pred_cluster in enumerate(pred_clusters):
+        confusion_mat[pred_cluster, raw_test_y[i]] += 1
+    
+    for i, pred_cluster in enumerate(pred_clusters):
+        pred_label = torch.argmax(confusion_mat[pred_cluster])
+        correct += (pred_label == raw_test_y[i])
+
+    print("Accuracy: {} %".format(correct.numpy()/total*100))
+    return correct.numpy()/total*100
 
 #### The following tools were adapted from https://github.com/PatrickHua/SimSiam
 # kNN monitor

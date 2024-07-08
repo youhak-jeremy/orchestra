@@ -42,7 +42,8 @@ def get_eval_fn(config_dict, net, device, global_acc_dict):
             global_acc_dict.append(accuracy)
             return loss, {"accuracy": accuracy}
         else:
-            accuracy = utils.knn_monitor(net.backbone, memloader, testloader, device=device)
+            # accuracy = utils.knn_monitor(net.backbone, memloader, testloader, device=device)
+            accuracy = utils.get_cluster_accuracy(net.backbone, testloader, device=device)
             global_acc_dict.append(accuracy)
             return -10., {"accuracy": accuracy}
         

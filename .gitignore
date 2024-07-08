@@ -1,3 +1,10 @@
+# FedUHD
+configs/
+data/
+*.txt
+saved_models*/
+*.py_bak
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

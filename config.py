@@ -13,7 +13,7 @@ config_dict = {
 
     #### GPU and virtualization ####
     'main_device': 'cuda:0', # choices: 0--7
-    'CUDA_VISIBLE_DEVICES': '0,1,2,3,4,5,6,7', # choices: 0--7
+    'CUDA_VISIBLE_DEVICES': '0', # choices: 0--7
     'virtualize': True, # choices: True, False
     'client_vram': 3000, # vram for client in MB
 
@@ -52,8 +52,10 @@ config_dict = {
 
 
 eval_dict = {
-    'main_device': 'cuda:6', # choices: 0--7
-    'pretrained_loc': "./saved_models/model_CIFAR10_0.1_alpha_byol_100_clients_16_bsize_1_lepochs_0.5_fit_0_seed.pth", # set this to location where the global model is saved
+    'main_device': 'cuda:0', # choices: 0--7
+    # 'pretrained_loc': "./saved_models/model_CIFAR10_0.1_alpha_orchestra_100_clients_16_bsize_10_lepochs_0.5_fit_128_gclusters_16_lclusters_1_seed.pth", # set this to location where the global model is saved
+    # 'pretrained_loc': "./saved_models/model_CIFAR10_0.1_alpha_orchestra_10_clients_16_bsize_10_lepochs_0.5_fit_128_gclusters_16_lclusters_1_seed.pth", # set this to location where the global model is saved
+    'pretrained_loc': "./saved_models_orchestra_cifar10_cn10/model_CIFAR10_0.1_alpha_orchestra_10_clients_128_bsize_10_lepochs_1.0_fit_64_gclusters_8_lclusters_1_seed.pth", # set this to location where the global model is saved
     'forced_path': "1212312312", # nuisace variable; ignore
     'batch_size': 256, # batch size for linear eval
     'warmup_epochs': 0, # warmup epochs (some papers use this; we don't)

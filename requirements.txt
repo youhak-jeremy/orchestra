@@ -3,7 +3,6 @@ ray==1.11.1
 torch
 torchvision
 tqdm
-sklearn
 numpy==1.21.0
 scipy==1.7.1
 scikit-learn==0.24.2
