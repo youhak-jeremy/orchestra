@@ -16,6 +16,7 @@ from torchvision.datasets import CIFAR10, CIFAR100
 from sklearn.cluster import KMeans
 import pickle as pkl
 import numpy as np
+import pandas as pd
 import sys
 import time
 from tqdm import tqdm
@@ -70,6 +71,22 @@ def get_dataset_subset(dataset, subset_proportion=1, force_class_balanced=False,
     subset_dataset = clientDataset(dataset, extracted_indices)
     return subset_dataset
 
+class HARDataset(Dataset):
+    def __init__(self, X, y, transform=None):
+        self.X = torch.tensor(np.array(X), dtype=torch.float32)
+        self.targets = torch.tensor(np.array(y)-np.ones_like(y), dtype=torch.long)
+        self.classes = ['WALKING', 'WALKING_UPSTAIRS', 'WALKING_DOWNSTAIRS', 'SITTING', 'STANDING', 'LAYING']
+        self.transform = transform
+        self.X = (self.X - torch.min(self.X, dim=0).values) / \
+                (torch.max(self.X, dim=0).values - torch.min(self.X, dim=0).values)
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        if self.transform:
+            return self.transform(self.X[idx]), self.targets[idx]
+        return self.X[idx], self.targets[idx]
 
 ########## Custom Pickled Dataset class #########
 
@@ -300,6 +317,55 @@ class OrchestraTransform():
             x3 = image_rot(self.transform(x), 90*angle)
             return x1, [x2, x3, angle]
 
+class HARTransform():
+    def __init__(self, is_sup, jitter_std=0.02, drop_prob=0.002, scale_std=0.01):
+        self.jitter_std = jitter_std
+        self.drop_prob = drop_prob
+        self.scale_std = scale_std
+        self.is_sup = is_sup
+
+    def jitter(self, x):
+        return x + self.jitter_std * (torch.randn_like(x) - 0.5)
+
+    def feature_dropout(self, x):
+        mask = torch.bernoulli((1 - self.drop_prob) * torch.ones_like(x))
+        return x * mask
+
+    def random_scaling(self, x):
+        scale = torch.normal(1.0, self.scale_std, size=(x.shape[0],)).to(x.device)
+        return x * scale
+
+    def augment(self, x):
+        # Apply chained augmentations
+        x = self.jitter(x)
+        x = self.random_scaling(x)
+        x = (x - torch.min(x, dim=0).values) / \
+                (torch.max(x, dim=0).values - torch.min(x, dim=0).values)
+        # x = self.feature_dropout(x)
+        return x
+
+    def __call__(self, x):
+        # x: 1D or 2D torch tensor
+        if self.is_sup:
+            return self.augment(x)
+        else:
+            x1 = self.augment(x)
+            x2 = self.augment(x)
+            return x1, x2
+
+class HAROrchestraTransform(HARTransform):
+    def __call__(self, x):
+        n = random.random()
+        angle = 0 if n <= 0.25 else 1 if n <= 0.5 else 2 if n <= 0.75 else 3
+        if self.is_sup:
+            return self.augment(x)
+        else:
+            x1 = self.augment(x)
+            x2 = self.augment(x)
+            x3 = self.augment(x).roll(140*angle)
+            return x1, [x2, x3, angle]
+            # x3 = x2
+            # return x1, [x2, x3, 0]
 
 ######### Dataloaders #########
 def load_data(config_dict, client_id=-1, n_clients=50, alpha=1e0, bsize=16, 
@@ -328,6 +394,10 @@ def load_data(config_dict, client_id=-1, n_clients=50, alpha=1e0, bsize=16,
         transform_train = RotTransform(is_sup=(train_mode=="sup"))
     elif(da_method=="orchestra"):
         transform_train = OrchestraTransform(is_sup=(train_mode=="sup"), image_size=32)
+    elif(da_method=="har"):
+        transform_train = HARTransform(is_sup=(train_mode=="sup"), jitter_std=config_dict['jitter_std'], scale_std=config_dict['scale_std'])
+    elif(da_method=="har_orchestra"):
+        transform_train = HAROrchestraTransform(is_sup=(train_mode=="sup"), jitter_std=config_dict['jitter_std'], scale_std=config_dict['scale_std'])
 
     transform_test = T.Compose([
         T.ToTensor(), 
@@ -343,6 +413,14 @@ def load_data(config_dict, client_id=-1, n_clients=50, alpha=1e0, bsize=16,
         trainset = CIFAR100(f"{data_dir}/dataset/CIFAR100", train=True, download=False, transform=transform_train)
         memset = CIFAR100(f"{data_dir}/dataset/CIFAR100", train=True, download=False, transform=transform_test)
         testset = CIFAR100(f"{data_dir}/dataset/CIFAR100", train=False, download=False, transform=transform_test)
+    elif(dataset_name=="HAR"):
+        X_train = pd.read_csv(f"{data_dir}/dataset/UCI HAR Dataset/train/X_train.txt", delim_whitespace=True, header=None)
+        y_train = pd.read_csv(f"{data_dir}/dataset/UCI HAR Dataset/train/y_train.txt", delim_whitespace=True, header=None)
+        X_test = pd.read_csv(f"{data_dir}/dataset/UCI HAR Dataset/test/X_test.txt", delim_whitespace=True, header=None)
+        y_test = pd.read_csv(f"{data_dir}/dataset/UCI HAR Dataset/test/y_test.txt", delim_whitespace=True, header=None)
+        trainset = HARDataset(X_train, y_train, transform=transform_train)
+        memset = HARDataset(X_train, y_train)
+        testset = HARDataset(X_test, y_test)
     else:
         raise Exception("Dataset not recognized")
 
@@ -404,7 +482,7 @@ def test(net, testloader, device="cpu", verbose=True):
 def get_cluster_accuracy(net, test_data_loader, device="cpu", verbose=True):
     net.eval()
     classes = len(test_data_loader.dataset.classes)
-    num_cluster = 64 if classes < 64 else 128
+    num_cluster = 12 if classes < 10 else 64 if classes <100 else 128
     
     # Accumulate embeddings
     accumulated_embeddings = []
@@ -433,13 +511,13 @@ def get_cluster_accuracy(net, test_data_loader, device="cpu", verbose=True):
     total = len(accumulated_embeddings)
     for i, pred_cluster in enumerate(pred_clusters):
         confusion_mat[pred_cluster, raw_test_y[i]] += 1
-    
+
     for i, pred_cluster in enumerate(pred_clusters):
         pred_label = torch.argmax(confusion_mat[pred_cluster])
         correct += (pred_label == raw_test_y[i])
 
-    print("Accuracy: {} %".format(correct.numpy()/total*100))
-    return correct.numpy()/total*100
+    print("Accuracy: {} %".format(correct.numpy().squeeze()/total*100))
+    return correct.numpy().squeeze()/total*100
 
 #### The following tools were adapted from https://github.com/PatrickHua/SimSiam
 # kNN monitor

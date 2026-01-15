@@ -41,9 +41,9 @@ def run(config_dict, eval_dict, do_linear=True):
     # Federated training
     server.server_run(config_dict)
 
-    # Linear eval
-    if(do_linear):
-        eval_results = linear_eval.main(config_dict, eval_dict)
+    # # Linear eval
+    # if(do_linear):
+    #     eval_results = linear_eval.main(config_dict, eval_dict)
 
     # Save results
     if(config_dict["train_mode"]=="orchestra"):
@@ -52,11 +52,12 @@ def run(config_dict, eval_dict, do_linear=True):
         model_name = f'{config_dict["train_mode"]}_{config_dict["num_clients"]}_clients_{config_dict["local_bsize"]}_bsize_{config_dict["local_epochs"]}_lepochs_{config_dict["fraction_fit"]}_fit_{config_dict["num_global_clusters"]}_specclusters_{config_dict["seed"]}_seed'
     else:
         model_name = f'{config_dict["train_mode"]}_{config_dict["num_clients"]}_clients_{config_dict["local_bsize"]}_bsize_{config_dict["local_epochs"]}_lepochs_{config_dict["fraction_fit"]}_fit_{config_dict["seed"]}_seed'
-    eval_dest = f'{config_dict["save_dir"]}/saved_models/eval_{config_dict["dataset"]}_{config_dict["alpha"]}_alpha_'+model_name+'.txt'
-    with open(eval_dest, 'w') as f:
-        f.write(pp.pformat(eval_results))
+    # eval_dest = f'{config_dict["save_dir"]}/saved_models/eval_{config_dict["dataset"]}_{config_dict["alpha"]}_alpha_'+model_name+'.txt'
+    # with open(eval_dest, 'w') as f:
+    #     f.write(pp.pformat(eval_results))
 
-    return eval_results
+    # return eval_results
+    return
 
 def get_parser():
     parser = argparse.ArgumentParser(description="Flower")

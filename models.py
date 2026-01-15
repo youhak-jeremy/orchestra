@@ -197,6 +197,34 @@ def ResNet56(num_classes=10, block="BasicBlock"):
     return ResNet_basic(get_block(block), [9,9,9], num_classes=num_classes)
 
 
+class SimpleNN(nn.Module):
+    def __init__(self, input_dim=561, num_classes=6):
+        super(SimpleNN, self).__init__()
+        self.train_sup = (num_classes > 0)
+
+        self.fc1 = nn.Linear(input_dim, 512)
+        self.bn1 = nn.BatchNorm1d(512)
+
+        self.fc2 = nn.Linear(512, 512)
+        self.bn2 = nn.BatchNorm1d(512)
+
+        self.fc3 = nn.Linear(512, 512)
+        self.bn3 = nn.BatchNorm1d(512)
+
+        self.output_dim = 512
+        if self.train_sup:
+            self.linear = nn.Linear(512, num_classes)
+
+    def forward(self, x):
+        # x = torch.flatten(x, start_dim=1)
+        out = F.relu(self.bn1(self.fc1(x)))
+        out = F.relu(self.bn2(self.fc2(out)))
+        out = F.relu(self.bn3(self.fc3(out)))
+
+        if self.train_sup:
+            out = self.linear(out)
+        return out
+
 ### Retrieval function for backbones ###
 def create_backbone(name, num_classes=10, block='BasicBlock'):
     if(name == 'VGG'):
@@ -207,6 +235,8 @@ def create_backbone(name, num_classes=10, block='BasicBlock'):
         net = ResNet34(num_classes=num_classes, block=block)
     elif(name == 'res56'):
         net = ResNet56(num_classes=num_classes, block=block)
+    elif(name == 'simpleNN'):
+        net = SimpleNN(num_classes=num_classes)
 
     return net
 
@@ -512,6 +542,7 @@ class orchestra(nn.Module):
         self.N_centroids = config_dict['num_global_clusters'] # Number of centroids 
         self.m_size = config_dict['cluster_m_size'] # Memory size for projector representations 
         self.T = config_dict['main_T']
+        self.dataset = config_dict['dataset']
 
         self.ema_value = config_dict['ema_value']
 
@@ -676,6 +707,9 @@ class orchestra(nn.Module):
         L_cluster = - torch.sum(tP1 * logpZ2, dim=1).mean()
 
         # Degeneracy regularization
+        # if self.dataset == 'HAR':
+        #     L_deg = 0
+        # else:
         deg_preds = self.deg_layer(self.projector(self.backbone(x3)))
         L_deg = F.cross_entropy(deg_preds, deg_labels)
         L = L_cluster + L_deg

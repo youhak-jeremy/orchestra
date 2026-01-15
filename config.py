@@ -2,7 +2,7 @@
 config_dict = {
 
     #### Data ####
-    'dataset': 'CIFAR10', # choices: CIFAR10, CIFAR100
+    'dataset': 'CIFAR10', # choices: CIFAR10, CIFAR100, HAR
     'seed': 1, # set random seed
     'num_clients': 100, # choices: Int
     'alpha': 1e-1,  # choices= 1e-2, 1e-1, 1e0, 1e1, 1e2, 1e3, 1e4, 1e5
@@ -25,7 +25,7 @@ config_dict = {
     'stateful_client': False, # create a stateful client that does not share target model every round (used in cross-silo setting by prior works--not used with Orchestra)
 
     # Model
-    'model_class': 'res18', # choices: VGG, res18, res34, res56
+    'model_class': 'res18', # choices: VGG, res18, res34, res56, simpleNN
     'block': 'BasicBlock', # choices: BasicBlock, Bottleneck
 
     # Fit / Eval fractions
@@ -48,6 +48,9 @@ config_dict = {
     'num_global_clusters': 128, # number of global clusters (used in Orchestra and SpecLoss)
     'num_local_clusters': 16, # number of local clusters (used in Orchestra only)
     'cluster_m_size': 128, # Memory size per client (used in Orchestra only)
+
+    'jitter_std': 0.02,
+    'scale_std': 0.01,
 }
 
 
@@ -55,7 +58,7 @@ eval_dict = {
     'main_device': 'cuda:0', # choices: 0--7
     # 'pretrained_loc': "./saved_models/model_CIFAR10_0.1_alpha_orchestra_100_clients_16_bsize_10_lepochs_0.5_fit_128_gclusters_16_lclusters_1_seed.pth", # set this to location where the global model is saved
     # 'pretrained_loc': "./saved_models/model_CIFAR10_0.1_alpha_orchestra_10_clients_16_bsize_10_lepochs_0.5_fit_128_gclusters_16_lclusters_1_seed.pth", # set this to location where the global model is saved
-    'pretrained_loc': "./saved_models_orchestra_cifar10_cn10/model_CIFAR10_0.1_alpha_orchestra_10_clients_128_bsize_10_lepochs_1.0_fit_64_gclusters_8_lclusters_1_seed.pth", # set this to location where the global model is saved
+    'pretrained_loc': "./baselines/model_CIFAR10_0.1_alpha_orchestra_10_clients_128_bsize_10_lepochs_1.0_fit_64_gclusters_8_lclusters_1_seed.pth", # set this to location where the global model is saved
     'forced_path': "1212312312", # nuisace variable; ignore
     'batch_size': 256, # batch size for linear eval
     'warmup_epochs': 0, # warmup epochs (some papers use this; we don't)
@@ -69,6 +72,7 @@ eval_dict = {
     'subset_proportion': 1, # choices: float <= 1; denotes amount of data used for semi-supervised training
     'subset_force_class_balanced': False, # use class-balanced dataset for semi-supervised training 
     'subset_seed': 0, # just another seed
+    'noise_type':'pkt_loss', #for robustness test
 }
 
 def get_config_dict():

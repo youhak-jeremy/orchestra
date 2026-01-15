@@ -16,9 +16,9 @@ class MyFedAvg(FedAvg):
         *,
         fraction_fit: float = 0.1,
         fraction_eval: float = 0.1,
-        min_fit_clients: int = 2,
-        min_eval_clients: int = 2,
-        min_available_clients: int = 2,
+        min_fit_clients: int = 1,
+        min_eval_clients: int = 1,
+        min_available_clients: int = 1,
         eval_fn: Optional[
             Callable[[Weights], Optional[Tuple[float, Dict[str, Scalar]]]]
         ] = None,

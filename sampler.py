@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import argparse
 import torch
 from torchvision import datasets, transforms
@@ -7,7 +8,7 @@ import os, shutil
 import utils
 
 parser = argparse.ArgumentParser(description="Sample data for clients")
-parser.add_argument("--dataset", default="CIFAR10", choices=["CIFAR10", "CIFAR100"])
+parser.add_argument("--dataset", default="CIFAR10", choices=["CIFAR10", "CIFAR100", "HAR"])
 parser.add_argument("--n_clients", type=int, default=10)
 parser.add_argument("--alpha", type=float, default=1e5, choices=[1e-3, 1e-2, 1e-1, 1e0, 1e1, 1e2, 1e3, 1e4, 1e5])
 parser.add_argument("--use_IID", type=str, default='False', choices=['True', 'False'])
@@ -49,6 +50,10 @@ elif(args.dataset=="CIFAR100"):
         transform=transforms.Compose([transforms.ToTensor()]))
     test_data = datasets.CIFAR100(f'{args.data_dir}/dataset/CIFAR100', train=False, download=True,
         transform=transforms.Compose([transforms.ToTensor()]))
+elif(args.dataset=="HAR"):
+    n_classes = 6
+    train_data = pd.read_csv(f'{args.data_dir}/dataset/UCI HAR Dataset/train/y_train.txt', delim_whitespace=True, header=None, names=["targets"])
+    test_data = pd.read_csv(f'{args.data_dir}/dataset/UCI HAR Dataset/test/y_test.txt', delim_whitespace=True, header=None, names=["targets"])
 else:
     raise Exception("Dataset not recognized")
 n_samples_train = len(train_data)
@@ -57,8 +62,12 @@ n_samples_test = len(test_data)
 
 ##### Determine locations of different classes
 all_ids_train = np.array(train_data.targets)
+if args.dataset=="HAR":
+    all_ids_train = all_ids_train - np.ones_like(all_ids_train)
 class_ids_train = {class_num: np.where(all_ids_train == class_num)[0] for class_num in range(n_classes)}
 all_ids_test = np.array(test_data.targets)
+if args.dataset=="HAR":
+    all_ids_test = all_ids_test - np.ones_like(all_ids_test)
 class_ids_test = {class_num: np.where(all_ids_test == class_num)[0] for class_num in range(n_classes)}
 
 

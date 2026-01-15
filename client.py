@@ -54,7 +54,11 @@ def ssl_train(net, trainloader, epochs, lr, device=None, is_orchestra=False):
         net.reset_memory(trainloader, device=device)
         net.local_clustering(device=device)
         return -1
-
+    # # total_loss = 0
+    # torch.cuda.synchronize()
+    # start = time.time()
+    # print ("@@@@@@training starts!!\n\n\n\n")
+    # # for _ in range(1000000): #for power measurement
     for _ in range(epochs):
         
         for batch_idx, ((data1, data2), labels) in enumerate(trainloader):
@@ -68,6 +72,13 @@ def ssl_train(net, trainloader, epochs, lr, device=None, is_orchestra=False):
             loss = net(input1, input2, input3, deg_labels)
             loss.backward()
             optimizer.step()
+    #         # total_loss += loss
+    # torch.cuda.synchronize()
+    # end = time.time()
+    # print(f"Training latency: {(end - start) * 1000:.3f} ms")
+
+    # # net.avg_loss = total_loss / epochs / (batch_idx +1)
+    # # print(f"[Client] Training done. Avg loss: {net.avg_loss:.4f}")
 
     if(is_orchestra):
         net.local_clustering(device=device)
@@ -194,7 +205,11 @@ def main(config_dict):
     # Parse command line argument `partition`
     parser = argparse.ArgumentParser(description="Flower")
     parser.add_argument("--client_id", type=int, default=0)
+    parser.add_argument("--config_dict", type=str, default="{}")
     args = parser.parse_args()
+
+    config_dict_update = eval(args.config_dict)
+    config_dict.update(config_dict_update)
 
     # device = torch.device(config_dict["main_device"] if torch.cuda.is_available() else "cpu")
     device = torch.device("cuda:"+str(args.client_id%8) if torch.cuda.is_available() else "cpu")
@@ -206,8 +221,41 @@ def main(config_dict):
 
     local_client.save_net()
 
+def run_local_training(client_id, config_dict):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config_dict", type=str, default="{}")
+    args = parser.parse_args()
+
+    config_dict_update = eval(args.config_dict)
+    config_dict.update(config_dict_update)
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    client = make_client(client_id, device=device, config_dict=config_dict)
+
+    # Access internal model and training data
+    if(config_dict["train_mode"]=="simclr"):
+        net = simclr(config_dict=config_dict, bbone_arch=config_dict["model_class"]) 
+    elif(config_dict["train_mode"]=="simsiam"):
+        net = simsiam(config_dict=config_dict, bbone_arch=config_dict["model_class"])
+    elif(config_dict["train_mode"]=="byol"):
+        net = byol(config_dict=config_dict, bbone_arch=config_dict["model_class"]) 
+    elif(config_dict["train_mode"]=="specloss"):
+        net = specloss(config_dict=config_dict, bbone_arch=config_dict["model_class"]) 
+    elif(config_dict["train_mode"]=="rotpred"):
+        net = rotpred(config_dict=config_dict, bbone_arch=config_dict["model_class"])
+    elif(config_dict["train_mode"]=="orchestra"):
+        net = orchestra(config_dict=config_dict, bbone_arch=config_dict["model_class"])
+
+    config = config_dict
+    initial_parameters=fl.common.weights_to_parameters([val.cpu().numpy() for _, val in net.state_dict().items()])
+    client.fit(initial_parameters, config)
+
+
 if __name__ == "__main__":
     config_dict = get_config_dict()
     torch.manual_seed(config_dict['seed'])
 
-    main(config_dict)
+    # Use this for local training only
+    run_local_training(client_id=0, config_dict=config_dict)
+
+    # main(config_dict)

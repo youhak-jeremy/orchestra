@@ -14,7 +14,7 @@ def main(config_dict, eval_dict):
     # Dataloaders
     _, _, testloader = utils.load_data(config_dict, client_id=-1, bsize=eval_dict["batch_size"], linear_eval=True)
     classes = len(testloader.dataset.classes)
-    num_cluster = 64 if classes < 64 else 128
+    num_cluster = 256 if classes < 64 else 128
 
     # Model definitions
     net = create_backbone(name=eval_dict["model_class"], num_classes=0).to(device)
