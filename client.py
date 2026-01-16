@@ -17,7 +17,7 @@ import torchvision.transforms as transforms
 import pickle as pkl
 import numpy as np
 import utils
-from config import get_config_dict
+import config
 from models import create_backbone, simclr, simsiam, byol, specloss, rotpred, orchestra
 
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -54,28 +54,28 @@ def ssl_train(net, trainloader, epochs, lr, device=None, is_orchestra=False):
         net.reset_memory(trainloader, device=device)
         net.local_clustering(device=device)
         return -1
-    # # total_loss = 0
-    # torch.cuda.synchronize()
-    # start = time.time()
-    # print ("@@@@@@training starts!!\n\n\n\n")
-    # # for _ in range(1000000): #for power measurement
-    for _ in range(epochs):
-        
-        for batch_idx, ((data1, data2), labels) in enumerate(trainloader):
-            input1 = data1.to(device)
-            if(is_orchestra):
-                input2, input3, deg_labels = data2[0].to(device), data2[1].to(device), data2[2].to(device)
-            else:
-                input2, input3, deg_labels = data2.to(device), None, None
+    # total_loss = 0
+    torch.cuda.synchronize()
+    start = time.time()
+    print ("@@@@@@training starts!!\n\n\n\n")
+    for _ in range(1000000): #for power measurement
+        for _ in range(epochs):
 
-            optimizer.zero_grad()
-            loss = net(input1, input2, input3, deg_labels)
-            loss.backward()
-            optimizer.step()
-    #         # total_loss += loss
-    # torch.cuda.synchronize()
-    # end = time.time()
-    # print(f"Training latency: {(end - start) * 1000:.3f} ms")
+            for batch_idx, ((data1, data2), labels) in enumerate(trainloader):
+                input1 = data1.to(device)
+                if(is_orchestra):
+                    input2, input3, deg_labels = data2[0].to(device), data2[1].to(device), data2[2].to(device)
+                else:
+                    input2, input3, deg_labels = data2.to(device), None, None
+
+                optimizer.zero_grad()
+                loss = net(input1, input2, input3, deg_labels)
+                loss.backward()
+                optimizer.step()
+                # total_loss += loss
+    torch.cuda.synchronize()
+    end = time.time()
+    print(f"Training latency: {(end - start) * 1000:.3f} ms")
 
     # # net.avg_loss = total_loss / epochs / (batch_idx +1)
     # # print(f"[Client] Training done. Avg loss: {net.avg_loss:.4f}")
@@ -250,12 +250,104 @@ def run_local_training(client_id, config_dict):
     initial_parameters=fl.common.weights_to_parameters([val.cpu().numpy() for _, val in net.state_dict().items()])
     client.fit(initial_parameters, config)
 
+def measure_orchestra_latency(client_id, config_dict):
+    """
+    Runs Orchestra training directly in PyTorch without Flower overhead 
+    to measure raw training latency.
+    """
+    torch.backends.cudnn.benchmark = True
+
+    # 1. Setup Device
+    # Ensure we use the device specified in config or fallback to cuda:0
+    if 'CUDA_VISIBLE_DEVICES' in config_dict:
+        device_str = "cuda:0" 
+    else:
+        device_str = "cuda:0" if torch.cuda.is_available() else "cpu"
+    
+    device = torch.device(device_str)
+    print(f"Measuring Latency on Device: {device}")
+
+    # 2. Load Data Directly
+    print("Loading data...")
+    trainloader, memloader, testloader = utils.load_data(
+        config_dict, 
+        client_id=client_id, 
+        n_clients=config_dict['num_clients'], 
+        alpha=config_dict['alpha'],
+        bsize=config_dict["local_bsize"], 
+        in_simulation=config_dict["virtualize"]
+    )
+
+    # 3. Initialize Model Directly
+    print(f"Initializing Orchestra model for dataset {config_dict['dataset']}...")
+    net = orchestra(config_dict=config_dict, bbone_arch=config_dict["model_class"])
+    net = net.to(device)
+
+    # 4. Execution
+    print("\n--- [Warmup] Executing Round 0 (Local Clustering Init) ---")
+    
+    # FIX: Assign a Tensor, not a list
+    if hasattr(net, 'rounds_done'):
+        net.rounds_done = torch.tensor([0], device=device)
+    
+    # This call performs clustering initialization and returns immediately
+    ssl_train(
+        net, trainloader, 
+        epochs=config_dict["local_epochs"], 
+        lr=config_dict['local_lr'], 
+        device=device, 
+        is_orchestra=True
+    )
+
+    print("\n--- [Measurement] Executing Round 1 (Actual Training) ---")
+    
+    # FIX: Assign a Tensor, not a list
+    if hasattr(net, 'rounds_done'):
+        net.rounds_done = torch.tensor([1], device=device)
+    
+    # This call will run the actual training epochs and print latency
+    ssl_train(
+        net, trainloader, 
+        epochs=config_dict["local_epochs"], 
+        lr=config_dict['local_lr'], 
+        device=device, 
+        is_orchestra=True
+    )
+
+def get_parser():
+    parser = argparse.ArgumentParser(description="Flower")
+    parser.add_argument("--do_linear", type=bool, default=True)
+    parser.add_argument("--config_dict", type=str, default="{}")
+    parser.add_argument("--eval_dict", type=str, default="{}")
+    return parser
+
+def update_configs(args, config_dict, eval_dict):
+    config_dict_update = eval(args.config_dict)
+    config_dict.update(config_dict_update)
+
+    eval_dict_update = eval(args.eval_dict)
+    eval_dict.update(config_dict_update)
+    eval_dict.update(eval_dict_update)
+    if(config_dict["train_mode"]=="orchestra"):
+        model_name = f'{config_dict["train_mode"]}_{config_dict["num_clients"]}_clients_{config_dict["local_bsize"]}_bsize_{config_dict["local_epochs"]}_lepochs_{config_dict["fraction_fit"]}_fit_{config_dict["num_global_clusters"]}_gclusters_{config_dict["num_local_clusters"]}_lclusters_{config_dict["seed"]}_seed'
+    elif(config_dict["train_mode"]=="specloss"):
+        model_name = f'{config_dict["train_mode"]}_{config_dict["num_clients"]}_clients_{config_dict["local_bsize"]}_bsize_{config_dict["local_epochs"]}_lepochs_{config_dict["fraction_fit"]}_fit_{config_dict["num_global_clusters"]}_specclusters_{config_dict["seed"]}_seed'
+    else:
+        model_name = f'{config_dict["train_mode"]}_{config_dict["num_clients"]}_clients_{config_dict["local_bsize"]}_bsize_{config_dict["local_epochs"]}_lepochs_{config_dict["fraction_fit"]}_fit_{config_dict["seed"]}_seed'
+    eval_dict['pretrained_loc'] = f'{config_dict["save_dir"]}/saved_models/model_{config_dict["dataset"]}_{config_dict["alpha"]}_alpha_'+model_name+'.pth'
+    return config_dict, eval_dict
 
 if __name__ == "__main__":
-    config_dict = get_config_dict()
+    parser = get_parser()
+    args = parser.parse_args()
+    config_dict = config.get_config_dict()
+    eval_dict = config.get_eval_dict()
+    config_dict, eval_dict = update_configs(args, config_dict, eval_dict)
     torch.manual_seed(config_dict['seed'])
 
-    # Use this for local training only
-    run_local_training(client_id=0, config_dict=config_dict)
-
+    # COMMENT OUT the old run_local_training or main
+    # run_local_training(client_id=0, config_dict=config_dict)
     # main(config_dict)
+
+    # RUN the pure benchmark
+    measure_orchestra_latency(client_id=0, config_dict=config_dict)

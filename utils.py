@@ -433,9 +433,9 @@ def load_data(config_dict, client_id=-1, n_clients=50, alpha=1e0, bsize=16,
         # Sanity check
         train_deets, test_deets = np.unique(np.array(trainset.targets)[train_ids], return_counts=True), np.unique(np.array(testset.targets)[test_ids], return_counts=True)
 
-        trainloader = DataLoader(clientDataset(trainset, train_ids), batch_size=bsize, shuffle=True, drop_last=True)            
-        memloader = DataLoader(clientDataset(memset, train_ids), batch_size=bsize, shuffle=True, drop_last=True)
-        testloader = DataLoader(clientDataset(testset, test_ids), batch_size=bsize, shuffle=False, drop_last=True)
+        trainloader = DataLoader(clientDataset(trainset, train_ids), batch_size=bsize, shuffle=True, num_workers=4, pin_memory=True, drop_last=True, prefetch_factor=4, persistent_workers=True)            
+        memloader = DataLoader(clientDataset(memset, train_ids), batch_size=bsize, shuffle=True, num_workers=4, pin_memory=True, drop_last=True, prefetch_factor=4, persistent_workers=True)
+        testloader = DataLoader(clientDataset(testset, test_ids), batch_size=bsize, shuffle=False, num_workers=4, pin_memory=True, drop_last=True, prefetch_factor=4, persistent_workers=True)
 
         # Sanity check
         if(not in_simulation):
