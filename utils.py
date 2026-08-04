@@ -17,6 +17,7 @@ from sklearn.cluster import KMeans
 import pickle as pkl
 import numpy as np
 import pandas as pd
+import os
 import sys
 import time
 from tqdm import tqdm
@@ -476,9 +477,13 @@ def load_data(config_dict, client_id=-1, n_clients=50, alpha=1e0, bsize=16,
         # Sanity check
         train_deets, test_deets = np.unique(np.array(trainset.targets)[train_ids], return_counts=True), np.unique(np.array(testset.targets)[test_ids], return_counts=True)
 
-        trainloader = DataLoader(clientDataset(trainset, train_ids), batch_size=bsize, shuffle=True, num_workers=4, pin_memory=True, drop_last=True, prefetch_factor=4, persistent_workers=True)            
-        memloader = DataLoader(clientDataset(memset, train_ids), batch_size=bsize, shuffle=True, num_workers=4, pin_memory=True, drop_last=True, prefetch_factor=4, persistent_workers=True)
-        testloader = DataLoader(clientDataset(testset, test_ids), batch_size=bsize, shuffle=False, num_workers=4, pin_memory=True, drop_last=True, prefetch_factor=4, persistent_workers=True)
+        worker_count = int(os.environ.get("ORCHESTRA_DATALOADER_WORKERS", "4"))
+        worker_options = {"num_workers": worker_count, "pin_memory": True}
+        if worker_count > 0:
+            worker_options.update({"prefetch_factor": 4, "persistent_workers": True})
+        trainloader = DataLoader(clientDataset(trainset, train_ids), batch_size=bsize, shuffle=True, drop_last=True, **worker_options)
+        memloader = DataLoader(clientDataset(memset, train_ids), batch_size=bsize, shuffle=True, drop_last=True, **worker_options)
+        testloader = DataLoader(clientDataset(testset, test_ids), batch_size=bsize, shuffle=False, drop_last=True, **worker_options)
 
         # Sanity check
         if(not in_simulation):
@@ -491,9 +496,10 @@ def load_data(config_dict, client_id=-1, n_clients=50, alpha=1e0, bsize=16,
         if subset_proportion < 1: # enables semi-supervised training
             trainset = get_dataset_subset(trainset, subset_proportion=subset_proportion, force_class_balanced=subset_force_class_balanced, seed=subset_seed)
             memset = get_dataset_subset(memset, subset_proportion=subset_proportion, force_class_balanced=subset_force_class_balanced, seed=subset_seed)
-        trainloader = DataLoader(trainset, batch_size=bsize, shuffle=force_shuffle, num_workers=2, drop_last=True)
-        memloader = DataLoader(memset, batch_size=bsize, shuffle=force_shuffle, num_workers=2, drop_last=True)
-        testloader = DataLoader(testset, batch_size=bsize, shuffle=force_shuffle, num_workers=2, drop_last=True)
+        server_worker_count = int(os.environ.get("ORCHESTRA_DATALOADER_WORKERS", "2"))
+        trainloader = DataLoader(trainset, batch_size=bsize, shuffle=force_shuffle, num_workers=server_worker_count, drop_last=True)
+        memloader = DataLoader(memset, batch_size=bsize, shuffle=force_shuffle, num_workers=server_worker_count, drop_last=True)
+        testloader = DataLoader(testset, batch_size=bsize, shuffle=force_shuffle, num_workers=server_worker_count, drop_last=True)
         # Sanity check
         print("\nTrain set size: {}; Test set size: {} \n".format(len(trainloader.dataset), len(testloader.dataset)))
 
