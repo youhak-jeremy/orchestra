@@ -1,0 +1,8 @@
+.git
+data
+r3_4_outputs
+saved_models
+*.log
+*.pth
+*.pkl
+__pycache__

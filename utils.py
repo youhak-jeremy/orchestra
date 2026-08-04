@@ -12,7 +12,7 @@ import torchvision
 import torchvision.transforms as T
 import torchvision.transforms.functional as TF
 from torch.utils.data import DataLoader, Dataset
-from torchvision.datasets import CIFAR10, CIFAR100
+from torchvision.datasets import CIFAR10, CIFAR100, FashionMNIST
 from sklearn.cluster import KMeans
 import pickle as pkl
 import numpy as np
@@ -22,6 +22,7 @@ import time
 from tqdm import tqdm
 from PIL import Image, ImageOps, ImageFilter
 import random
+from datasets_r34 import ISOLETDataset
 
 torch.manual_seed(0)
 cudnn.deterministic = True
@@ -367,6 +368,35 @@ class HAROrchestraTransform(HARTransform):
             # x3 = x2
             # return x1, [x2, x3, 0]
 
+
+class FashionSSLTransform:
+    """CIFAR-style image augmentation adapted to 1x28x28 Fashion-MNIST."""
+    def __init__(self, is_sup, method):
+        scale = (0.2, 1.0) if method == "specloss" else (0.5, 1.0)
+        blur_p = 1.0 if method == "byol" else 0.5
+        self.augment = T.Compose([
+            T.RandomResizedCrop(28, scale=scale, interpolation=T.InterpolationMode.BICUBIC),
+            T.RandomHorizontalFlip(p=0.5),
+            T.RandomApply([T.ColorJitter(0.4, 0.4, 0.2, 0.1)], p=0.8),
+            T.RandomGrayscale(p=0.2),
+            T.RandomApply([T.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0))], p=blur_p),
+            T.ToTensor(),
+            T.Normalize((0.5,), (0.5,)),
+        ])
+        self.is_sup = is_sup
+        self.is_orchestra = method == "orchestra"
+
+    def __call__(self, image):
+        x1 = self.augment(image)
+        if self.is_sup:
+            return x1
+        x2 = self.augment(image)
+        if not self.is_orchestra:
+            return x1, x2
+        angle = random.randrange(4)
+        x3 = image_rot(self.augment(image), 90 * angle)
+        return x1, [x2, x3, angle]
+
 ######### Dataloaders #########
 def load_data(config_dict, client_id=-1, n_clients=50, alpha=1e0, bsize=16, 
               linear_eval=False, hparam_eval=False, in_simulation=False, force_shuffle=False, 
@@ -378,7 +408,10 @@ def load_data(config_dict, client_id=-1, n_clients=50, alpha=1e0, bsize=16,
     data_dir = config_dict['data_dir']
     
     # Define data augmentations
-    if(hparam_eval):
+    if dataset_name == "FASHIONMNIST":
+        method = "orchestra" if train_mode == "orchestra" else da_method
+        transform_train = FashionSSLTransform(is_sup=(train_mode == "sup"), method=method)
+    elif(hparam_eval):
         transform_train = SimCLRTransform(is_sup=False, image_size=32)
     elif(linear_eval):
         transform_train = BaseTransform(is_sup=True, image_size=32)
@@ -421,6 +454,16 @@ def load_data(config_dict, client_id=-1, n_clients=50, alpha=1e0, bsize=16,
         trainset = HARDataset(X_train, y_train, transform=transform_train)
         memset = HARDataset(X_train, y_train)
         testset = HARDataset(X_test, y_test)
+    elif dataset_name == "ISOLET":
+        trainset = ISOLETDataset(data_dir, train=True, transform=transform_train)
+        memset = ISOLETDataset(data_dir, train=True)
+        testset = ISOLETDataset(data_dir, train=False)
+    elif dataset_name == "FASHIONMNIST":
+        fashion_root = f"{data_dir}/dataset/FASHIONMNIST"
+        fashion_test_transform = T.Compose([T.ToTensor(), T.Normalize((0.5,), (0.5,))])
+        trainset = FashionMNIST(fashion_root, train=True, download=False, transform=transform_train)
+        memset = FashionMNIST(fashion_root, train=True, download=False, transform=fashion_test_transform)
+        testset = FashionMNIST(fashion_root, train=False, download=False, transform=fashion_test_transform)
     else:
         raise Exception("Dataset not recognized")
 

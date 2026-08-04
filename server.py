@@ -83,7 +83,8 @@ def server_run(config_dict):
     os.makedirs(f'{config_dict["save_dir"]}/saved_models', exist_ok=True)
     
     ##### Create model
-    n_classes = 10 if (config_dict["dataset"]=="CIFAR10") else 100
+    n_classes = {"CIFAR10": 10, "CIFAR100": 100, "HAR": 6,
+                 "ISOLET": 26, "FASHIONMNIST": 10}[config_dict["dataset"]]
 
     # Define model
     if(config_dict["train_mode"]=="sup"):

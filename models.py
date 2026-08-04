@@ -225,6 +225,33 @@ class SimpleNN(nn.Module):
             out = self.linear(out)
         return out
 
+
+class SmallCNN(nn.Module):
+    """Small Fashion-MNIST encoder requested for the R3-4 comparison."""
+    def __init__(self, num_classes=10):
+        super(SmallCNN, self).__init__()
+        self.train_sup = num_classes > 0
+        self.features = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=5, padding=2),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+            nn.Conv2d(32, 64, kernel_size=5, padding=2),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+        )
+        self.representation = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(64 * 7 * 7, 512),
+            nn.ReLU(inplace=True),
+        )
+        self.output_dim = 512
+        if self.train_sup:
+            self.linear = nn.Linear(512, num_classes)
+
+    def forward(self, x):
+        out = self.representation(self.features(x))
+        return self.linear(out) if self.train_sup else out
+
 ### Retrieval function for backbones ###
 def create_backbone(name, num_classes=10, block='BasicBlock'):
     if(name == 'VGG'):
@@ -237,6 +264,12 @@ def create_backbone(name, num_classes=10, block='BasicBlock'):
         net = ResNet56(num_classes=num_classes, block=block)
     elif(name == 'simpleNN'):
         net = SimpleNN(num_classes=num_classes)
+    elif(name == 'simpleNN617'):
+        net = SimpleNN(input_dim=617, num_classes=num_classes)
+    elif(name == 'smallCNN'):
+        net = SmallCNN(num_classes=num_classes)
+    else:
+        raise ValueError(f"Unknown backbone: {name}")
 
     return net
 

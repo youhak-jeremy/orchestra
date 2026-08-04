@@ -6,9 +6,10 @@ from torchvision import datasets, transforms
 import pickle as pkl
 import os, shutil
 import utils
+from datasets_r34 import load_partition_source
 
 parser = argparse.ArgumentParser(description="Sample data for clients")
-parser.add_argument("--dataset", default="CIFAR10", choices=["CIFAR10", "CIFAR100", "HAR"])
+parser.add_argument("--dataset", default="CIFAR10", choices=["CIFAR10", "CIFAR100", "HAR", "ISOLET", "FASHIONMNIST"])
 parser.add_argument("--n_clients", type=int, default=10)
 parser.add_argument("--alpha", type=float, default=1e5, choices=[1e-3, 1e-2, 1e-1, 1e0, 1e1, 1e2, 1e3, 1e4, 1e5])
 parser.add_argument("--use_IID", type=str, default='False', choices=['True', 'False'])
@@ -54,6 +55,10 @@ elif(args.dataset=="HAR"):
     n_classes = 6
     train_data = pd.read_csv(f'{args.data_dir}/dataset/UCI HAR Dataset/train/y_train.txt', delim_whitespace=True, header=None, names=["targets"])
     test_data = pd.read_csv(f'{args.data_dir}/dataset/UCI HAR Dataset/test/y_test.txt', delim_whitespace=True, header=None, names=["targets"])
+elif args.dataset in ("ISOLET", "FASHIONMNIST"):
+    n_classes = 26 if args.dataset == "ISOLET" else 10
+    train_data = load_partition_source(args.dataset, args.data_dir, train=True)
+    test_data = load_partition_source(args.dataset, args.data_dir, train=False)
 else:
     raise Exception("Dataset not recognized")
 n_samples_train = len(train_data)

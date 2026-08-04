@@ -55,27 +55,18 @@ def ssl_train(net, trainloader, epochs, lr, device=None, is_orchestra=False):
         net.local_clustering(device=device)
         return -1
     # total_loss = 0
-    torch.cuda.synchronize()
-    start = time.time()
-    print ("@@@@@@training starts!!\n\n\n\n")
-    for _ in range(1000000): #for power measurement
-        for _ in range(epochs):
+    for _ in range(epochs):
+        for batch_idx, ((data1, data2), labels) in enumerate(trainloader):
+            input1 = data1.to(device)
+            if(is_orchestra):
+                input2, input3, deg_labels = data2[0].to(device), data2[1].to(device), data2[2].to(device)
+            else:
+                input2, input3, deg_labels = data2.to(device), None, None
 
-            for batch_idx, ((data1, data2), labels) in enumerate(trainloader):
-                input1 = data1.to(device)
-                if(is_orchestra):
-                    input2, input3, deg_labels = data2[0].to(device), data2[1].to(device), data2[2].to(device)
-                else:
-                    input2, input3, deg_labels = data2.to(device), None, None
-
-                optimizer.zero_grad()
-                loss = net(input1, input2, input3, deg_labels)
-                loss.backward()
-                optimizer.step()
-                # total_loss += loss
-    torch.cuda.synchronize()
-    end = time.time()
-    print(f"Training latency: {(end - start) * 1000:.3f} ms")
+            optimizer.zero_grad()
+            loss = net(input1, input2, input3, deg_labels)
+            loss.backward()
+            optimizer.step()
 
     # # net.avg_loss = total_loss / epochs / (batch_idx +1)
     # # print(f"[Client] Training done. Avg loss: {net.avg_loss:.4f}")
@@ -115,7 +106,8 @@ def make_client(cid, device=None, stateless=True, config_dict=None):
         model_save_path = config_dict["save_dir"]+"/saved_models/"+config_dict["dataset"]+"_client_"+str(client_id)+".pth"
 
         ##### Create model
-        n_classes = 10 if (config_dict["dataset"]=="CIFAR10") else 100
+        n_classes = {"CIFAR10": 10, "CIFAR100": 100, "HAR": 6,
+                     "ISOLET": 26, "FASHIONMNIST": 10}[config_dict["dataset"]]
 
         ##### Load data
         trainloader, memloader, testloader = utils.load_data(config_dict, client_id=client_id, n_clients=config_dict['num_clients'], alpha=config_dict['alpha'],
