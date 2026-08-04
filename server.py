@@ -200,6 +200,12 @@ def server_run(config_dict):
             ray_init_args = {
                 "ignore_reinit_error": True,
                 "include_dashboard": False,
+                # Ray 1.11 cannot discover Kubernetes cgroup-v2 limits.  Allow
+                # the NRP job manifest to provide the allocated CPU count and
+                # keep the object store inside the mounted /dev/shm volume.
+                "num_cpus": int(os.environ.get("RAY_NUM_CPUS", os.cpu_count() or 1)),
+                "object_store_memory": int(os.environ.get(
+                    "RAY_OBJECT_STORE_MEMORY", 2 * 1024**3)),
             }
         )
     else:
